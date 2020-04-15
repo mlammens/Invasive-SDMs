@@ -1,0 +1,12 @@
+# Project Log for Invsives SDM project
+
+## Project Goal
+
+
+## Ideas
+
+This project started as building an SDM of Frangula alnus to use in a linked distribution and demographic model. 
+However, based on feedback from reviewers on this manuscript (rejected from Biological Invasions in 4/2020), I've decided to separate the two sections of that MS and expand on the SDM version.
+
+My goal is to model ca. 9 to 12 species, selecting from the LHPRISM Tier List. 
+This project will focus on woody invasive species, and will include Frangula alnus.
