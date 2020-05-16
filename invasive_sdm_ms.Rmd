@@ -1,0 +1,182 @@
+Please find below the R code history from your *Wallace* v1.0.6.2 session.
+
+You can reproduce your session results by running this R Markdown file in RStudio.
+
+Each code block is called a "chunk", and you can run them either one-by-one or all at once by choosing an option in the "Run" menu at the top-right corner of the "Source" pane in RStudio.
+
+For more detailed information see <http://rmarkdown.rstudio.com>).
+
+### Analysis Setup
+
+Run the `invasive_sdm_setup.R` script to call in necessary packages and setup functions.
+
+```{r}
+## Run setup script
+source("scripts/invasive_sdm_setup.R")
+## Source wallace functions for SDM analyses
+source(system.file('shiny/funcs', 'functions.R', package = 'wallace'))
+```
+
+Load the occurence data to be used 
+
+User CSV path with occurrence data. If the CSV file is not in the current workspace, change to the correct file path (e.g. "/Users/darwin/Documents/occs.csv").
+
+```{r}
+# NOTE: provide the path to the folder that contains the CSV file
+d.occs <- ''
+# create path to user occurrences csv file
+userOccs.path <- file.path(d.occs, "FRAL_Occurrence.csv")
+# read in csv
+userOccs.csv <- read.csv(userOccs.path, header = TRUE)
+# remove rows with duplicate coordinates
+occs.dups <- duplicated(userOccs.csv[c('longitude', 'latitude')])
+occs <- userOccs.csv[!occs.dups,]
+# remove NAs
+occs <- occs[complete.cases(occs$longitude, occs$latitude), ]
+# give all records a unique ID
+occs$occID <- row.names(occs)
+```
+
+### Process Occurrence Data
+
+Remove the occurrence localities with the following IDs: 2882.
+
+```{r}
+# remove the rows that match the occIDs selected
+occs <- occs %>% filter(!(occID %in% 2882))
+```
+
+Spatial thinning selected. Thin distance selected is 100 km.
+
+```{r}
+output <- spThin::thin(occs, 'latitude', 'longitude', 'name', thin.par = 100, reps = 100, locs.thinned.list.return = TRUE, write.files = FALSE, verbose = FALSE)
+```
+
+Since spThin did 100 iterations, there are 100 different variations of how it thinned your occurrence localities. As there is a stochastic element in the algorithm, some iterations may include more localities than the others, and we need to make sure we maximize the number of localities we proceed with.
+
+```{r}
+# find the iteration that returns the max number of occurrences
+maxThin <- which(sapply(output, nrow) == max(sapply(output, nrow)))
+# if there's more than one max, pick the first one
+maxThin <- output[[ifelse(length(maxThin) > 1, maxThin[1], maxThin)]]  
+# subset occs to match only thinned occs
+occs <- occs[as.numeric(rownames(maxThin)),]  
+```
+
+### Obtain Environmental Data
+
+Using WorldClim (<http://www.worldclim.org/>) bioclimatic dataset at resolution of 5 arcmin.
+
+```{r}
+# get WorldClim bioclimatic variable rasters
+envs <- raster::getData(name = "worldclim", var = "bio", res = 5, lat = , lon = )
+# change names rasters variables
+envRes <- 5
+if (envRes == 0.5) {
+  i <- grep('_', names(envs))
+  editNames <- sapply(strsplit(names(envs)[i], '_'), function(x) x[1])
+  names(envs)[i] <- editNames
+}
+i <- grep('bio[0-9]$', names(envs))
+editNames <- paste('bio', sapply(strsplit(names(envs)[i], 'bio'), function(x) x[2]), sep='0')
+names(envs)[i] <- editNames
+# subset by those variables selected
+envs <- envs[[c('bio01', 'bio02', 'bio03', 'bio04', 'bio05', 'bio06', 'bio07', 'bio08', 'bio09', 'bio10', 'bio11', 'bio12', 'bio13', 'bio14', 'bio15', 'bio16', 'bio17', 'bio18', 'bio19')]]
+# extract environmental values at occ grid cells
+locs.vals <- raster::extract(envs[[1]], occs[, c('longitude', 'latitude')])
+# remove occs without environmental values
+occs <- occs[!is.na(locs.vals), ]  
+```
+
+### Process Environmental Data
+
+Background selection technique chosen as Minimum Convex Polygon.
+
+```{r}
+occs.xy <- occs[c('longitude', 'latitude')]
+sp::coordinates(occs.xy) <- ~ longitude + latitude
+bgExt <- mcp(occs.xy)
+```
+
+Buffer size of the study extent polygon defined as 0.5 degrees.
+
+```{r}
+bgExt <- rgeos::gBuffer(bgExt, width = 0.5)
+```
+
+Mask environmental variables by Minimum Convex Polygon, and take a random sample of background values from the study extent. As the sample is random, your results may be different than those in the session. If there seems to be too much variability in these background samples, try increasing the number from 10,000 to something higher (e.g. 50,000 or 100,000). The better your background sample, the less variability you'll have between runs.
+
+```{r}
+# crop the environmental rasters by the background extent shape
+envsBgCrop <- raster::crop(envs, bgExt)
+# mask the background extent shape from the cropped raster
+envsBgMsk <- raster::mask(envsBgCrop, bgExt)
+# sample random background points
+bg.xy <- dismo::randomPoints(envsBgMsk, 10000)
+# convert matrix output to data frame
+bg.xy <- as.data.frame(bg.xy)  
+```
+
+### Partition Occurrence Data
+
+Occurrence data is now partitioned for cross-validation, a method that iteratively builds a model on all but one group and evaluates that model on the left-out group.
+
+For example, if the data is partitioned into 3 groups A, B, and C, a model is first built with groups A and B and is evaluated on C. This is repeated by building a model with B and C and evaluating on A, and so on until all combinations are done.
+
+Cross-validation operates under the assumption that the groups are independent of each other, which may or may not be a safe assumption for your dataset. Spatial partitioning is one way to ensure more independence between groups.
+
+You selected to partition your occurrence data by the method.
+
+```{r}
+occs.xy <- occs[c('longitude', 'latitude')]
+group.data <- ENMeval::get.block(occ=occs.xy, bg.coords=bg.xy)
+```
+
+```{r}
+# pull out the occurrence and background partition group numbers from the list
+occs.grp <- group.data[[1]]
+bg.grp <- group.data[[2]]
+```
+
+### Build and Evaluate Niche Model
+
+You selected the maxent model.
+
+```{r}
+# define the vector of regularization multipliers to test
+rms <- seq(1, 2, 1)
+# iterate model building over all chosen parameter settings
+e <- ENMeval::ENMevaluate(occs.xy, envsBgMsk, bg.coords = bg.xy, RMvalues = rms, fc = 'LQ', 
+                          method = 'user', occs.grp, bg.grp, clamp = TRUE, algorithm = "maxnet")
+
+# unpack the results data frame, the list of models, and the RasterStack of raw predictions
+evalTbl <- e@results
+evalMods <- e@models
+names(evalMods) <- e@results$settings
+evalPreds <- e@predictions
+```
+
+```{r}
+# view response curves for environmental variables with non-zero coefficients
+plot(evalMods[["LQ_1"]], vars = c('bio02', 'bio04', 'bio05', 'bio06', 'bio08', 'bio09', 'bio11', 'bio13', 'bio01', 'bio15', 'bio16', 'bio18'), type = "cloglog")
+```
+
+```{r}
+# view ENMeval results
+ENMeval::eval.plot(evalTbl, value = "avg.test.AUC")
+```
+
+```{r}
+# Select your model from the models list
+mod <- evalMods[["LQ_1"]]
+```
+
+```{r}
+# generate cloglog prediction
+pred <- ENMeval::maxnet.predictRaster(mod, envsBgMsk, type = 'cloglog', clamp = TRUE) 
+```
+
+```{r}
+# plot the model prediction
+plot(pred)
+```
