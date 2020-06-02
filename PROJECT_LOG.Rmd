@@ -35,3 +35,16 @@ Tier 4:
 * *Ailanthus altissima*
 * *Rhamnus cathartica*
 
+## Thoughts on the analysis
+
+* Probably going to use Maxent
+* Follow Allen and Bradley 2016 as a model for doing the analysis for multiple species
+
+## Thinks to think about futher
+
+* How to deal with comparing native vs naturalized/invaded range?
+    * Is MCP the best approach for getting background data in this case? 
+    * Perhaps consider using the point-buffer approach?
+* What is the spatial extent of my study?
+    * At some point, I want to limit the projections to NY
+    * Use "Eastern United States", so east of the Rockies? Similar to my F. alnus study?
