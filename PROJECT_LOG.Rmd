@@ -40,7 +40,7 @@ Tier 4:
 * Probably going to use Maxent
 * Follow Allen and Bradley 2016 as a model for doing the analysis for multiple species
 
-## Thinks to think about futher
+## Things to think about futher
 
 * How to deal with comparing native vs naturalized/invaded range?
     * Is MCP the best approach for getting background data in this case? 
@@ -48,3 +48,7 @@ Tier 4:
 * What is the spatial extent of my study?
     * At some point, I want to limit the projections to NY
     * Use "Eastern United States", so east of the Rockies? Similar to my F. alnus study?
+
+## Updates
+
+* Tried to run the multispecies version of wallace, but it froze when trying to do spatial k-fold validation. Need to try again another day.
