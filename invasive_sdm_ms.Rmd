@@ -37,6 +37,44 @@ occs <- occs[complete.cases(occs$longitude, occs$latitude), ]
 occs$occID <- row.names(occs)
 ```
 
+
+Getting occurrences from GBIF
+
+The search for occurrences was limited to 10^{4} records. Obtain occurrence records of the selected species from the gbif database.
+
+```{r}
+# query selected database for occurrence records
+spnames <- c("Ailanthus altissima", "Frangula alnus", "Rhamnus cathartica")
+results <- spocc::occ(query = spnames, from = "gbif", limit = 1000, has_coords = TRUE)
+
+# make a new data.frame of only gbif results
+results.data <- results[["gbif"]]$data
+
+# create an empty list object for occs.data
+occs.data <- list()
+
+for(x in 1:length(results.data)){
+  occs.dups <- duplicated(results.data[[x]][c('longitude', 'latitude')])
+  occs <- results.data[[x]][!occs.dups,]
+  # make sure latitude and longitude are numeric (sometimes they are characters)
+  occs$latitude <- as.numeric(occs$latitude)
+  occs$longitude <- as.numeric(occs$longitude)
+  # give all records a unique ID
+  occs$occID <- row.names(occs)
+  
+  # make a larger occs.data list of the new data.frams
+  occs.data[[x]] <- occs
+}
+
+names(occs.data) <- names(results.data)
+
+```
+
+
+
+
+
+
 ### Process Occurrence Data
 
 Remove the occurrence localities with the following IDs: 2882.

@@ -24,6 +24,8 @@ library(ggplot2)
 library(GGally)
 library(maps)
 library(rasterVis)
+library(purrr)
+
 
 ## ******************************************************************** ##
 ## Define the Extent of the area that I am working with. 
